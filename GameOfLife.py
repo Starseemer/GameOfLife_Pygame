@@ -1,14 +1,15 @@
 
-import pygame, time, sys
+import pygame, time, sys, os
 
 sys.path.append(".")
 
-from Cell import Cell
+from CellOptimized import Cell
+from pygame.time import Clock
 
 pygame.init()
 
-WIDTH = 900
-HEIGHT = 1000
+WIDTH=int(os.popen("xdpyinfo | awk '/dimensions/{print $2}'").read().split('x')[0] if os.name=='posix' else os.popen('wmic PATH Win32_VideoController GET CurrentHorizontalResolution'))
+HEIGHT=int(os.popen("xdpyinfo | awk '/dimensions/{print $2}'").read().split('x')[1] if os.name=='posix' else os.popen('wmic PATH Win32_VideoController GET CurrentVerticalResolution'))
 
 screen = pygame.display.set_mode([WIDTH, HEIGHT])
 
@@ -20,33 +21,43 @@ class Button:
         self.width = width
         self.height = height
         self.pushed = False
-    def setOnClick(self, x, y):s
+    def setOnClick(self, x, y):
         if(x >= self.x and x <= self.x + self.width and y >= self.y and y <= self.y + self.height):
+            self.pushed = True
             return True
+        self.pushed = False
         return False
     def draw(self):
         if(self.pushed):
             pygame.draw.rect(screen,(0,0,0),(self.x,self.y,self.width,self.height),0)
-            self.pushed = False
         else:
             pygame.draw.rect(screen,(0,0,0),(self.x,self.y,self.width,self.height),1)
-            self.pushed = True
 
 
 world = []
 for i in range(int(WIDTH/20)):
     row = []
-    for j in range(int(WIDTH/20)):
+    for j in range(int((HEIGHT-200)/20)):
         row.append(Cell(i,j,(i*20),(j*20),20,20,False))
     world.append(row)
+
+
+def parseTouch(x,y):
+    cell_x = int(x/20)
+    cell_y = int(y/20)
+    return (cell_x,cell_y)
 
 running = True
 lifeStarted = False
 clicked = False
-button = Button(WIDTH-100,HEIGHT-50,90,45)
+alive_cells = []
+alive_cells_as_rect = []
+print(WIDTH, HEIGHT)
+button = Button(WIDTH-100,HEIGHT-150,90,45)
 pos = (0,0)
-lastRunTime = time.time()
+fliped = False
 while running:
+    pygame.event.pump()
     willDie = []
     willBorn = []
     for event in pygame.event.get():
@@ -63,34 +74,57 @@ while running:
             else:
                 clicked = True
 
+    if(clicked):
+        parsed = parseTouch(pos[0],pos[1])
+        if(world[parsed[0]][parsed[1]].setOnClick()):
+            alive_cells.append(world[parsed[0]][parsed[1]])
+            for c in world[parsed[0]][parsed[1]].getNeigborCells(world):
+                if(not(c.isAlive()) and (c not in alive_cells)):
+                    alive_cells.append(c)
+        else:
+            alive_cells.remove(world[parsed[0]][parsed[1]])
+            for c in world[parsed[0]][parsed[1]].getNeigborCells(world):
+                if(not(c.isAlive())):
+                    alive_cells.remove(c)
+    
+    if(lifeStarted ):
+        for cell in alive_cells:
+            cell.checkNeigborCells(world)
+            if(cell.obeyTheRules()[0]):
+                willDie.append(cell)
+            if(cell.obeyTheRules()[1]):
+                willBorn.append(cell)
+            
+        
 
     screen.fill((255, 255, 255))
-    
-    for i in range(len(world)):
-        for j in range(len(world[i])):
-            if(lifeStarted ):
-                world[i][j].checkNeigborCells(world)
-                if(world[i][j].obeyTheRules()[0]):
-                    willDie.append((i,j))
-                if(world[i][j].obeyTheRules()[1]):
-                    willBorn.append((i,j))
-            if(clicked):
-                world[i][j].setOnClick(pos[0],pos[1])
-            world[i][j].draw(screen)
+    if(not(fliped)):
+        for i in range(len(world)):
+            for j in range(len(world[i])):
+                world[i][j].draw(screen)
+        button.draw()
+        pygame.display.flip()
+        fliped = False
 
+    print(len(alive_cells))
     for c in willDie:
-        world[c[0]][c[1]].kill()
+        c.kill()
+        alive_cells.remove(c)
+    print(len(alive_cells))
     for c in willBorn:
-        world[c[0]][c[1]].born()
-    button.draw()
+        c.born()
+        if(not(c in alive_cells)):
+            alive_cells.append(c)
+        for inncerCell in c.getNeigborCells(world):
+            if(not(inncerCell in alive_cells)):
+                alive_cells.append(inncerCell)
+    
     
 
-    pygame.display.flip()
+    #pygame.display.flip()
+    pygame.display.update(alive_cells)
     clicked = False
-    if(lifeStarted):
-        time.sleep(0.5)
-    else:
-        time.sleep(0.1)
+    Clock().tick(10)
 
     
 pygame.quit()
