@@ -3,7 +3,7 @@ import pygame, time, sys, os
 
 sys.path.append(".")
 
-from CellOptimized import Cell
+from Cell import Cell
 from pygame.time import Clock
 
 pygame.init()
